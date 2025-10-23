@@ -175,7 +175,6 @@ class PongGame:
 
     def run(self):
         while not self.handle_events():
-            print(self.ball.x_speed, self.ball.y_speed)
             self.ball.move(self.board, self.player_paddle, self.opponent_paddle)
             self.board.draw(
                 self.ball,
@@ -243,6 +242,7 @@ class FuzzyPlayer(Player):
         model = "TSK"  # Mamdami or TSK
         self.model = model
         
+        # for Mamdami:
         if self.model == "Mamdami":
             # x_d and y_d are the displacements of the ball with the respect to the paddle (since the I reversed the input)
             x_d = fuzzcontrol.Antecedent(np.arange(-w, w+1), "x_displacement")  # could lower to 760 x 760, but we have to remeber that the ball can go than tighter bounds
@@ -295,18 +295,18 @@ class FuzzyPlayer(Player):
             # velocity["fast right"] = fuzz.smf(velocity.universe, s*0.94, s*0.95)
 
             # # rules2
-            # rule1 = fuzzcontrol.Rule(x_d["far left"], velocity["fast right"])
-            # rule2 = fuzzcontrol.Rule(x_d["far right"], velocity["fast left"])
-            # rule3 = fuzzcontrol.Rule(x_d["medium left"] & (y_d["far"]), velocity["medium right"])
-            # rule4 = fuzzcontrol.Rule(x_d["medium right"] & (y_d["far"]), velocity["medium left"])
-            # rule5 = fuzzcontrol.Rule(x_d["medium left"] & ((y_d["mid"]) | y_d["close"]), velocity["fast right"])
-            # rule6 = fuzzcontrol.Rule(x_d["medium right"] & ((y_d["mid"]) | y_d["close"]), velocity["fast left"])
+            # rule1 = fuzzcontrol.Rule(x_d["far left"], velocity["fast left"])
+            # rule2 = fuzzcontrol.Rule(x_d["far right"], velocity["fast right"])
+            # rule3 = fuzzcontrol.Rule(x_d["medium left"] & (y_d["far"]), velocity["medium left"])
+            # rule4 = fuzzcontrol.Rule(x_d["medium right"] & (y_d["far"]), velocity["medium right"])
+            # rule5 = fuzzcontrol.Rule(x_d["medium left"] & ((y_d["mid"]) | y_d["close"]), velocity["fast left"])
+            # rule6 = fuzzcontrol.Rule(x_d["medium right"] & ((y_d["mid"]) | y_d["close"]), velocity["fast right"])
             # rule7 = fuzzcontrol.Rule(x_d["close"], velocity["low"])
 
             # SIMPLEST SOLUTION
             # simplest ruleset
-            # rule1 = fuzzcontrol.Rule(x_d["far left"] | x_d["left"], velocity["fast right"])
-            # rule2 = fuzzcontrol.Rule(x_d["far right"] | x_d["right"], velocity["fast left"])
+            # rule1 = fuzzcontrol.Rule(x_d["far left"] | x_d["left"], velocity["fast left"])
+            # rule2 = fuzzcontrol.Rule(x_d["far right"] | x_d["right"], velocity["fast right"])
             # rule3 = fuzzcontrol.Rule(x_d["close"] & (y_d["close"] | y_d["mid"] | y_d["far"]), velocity["low"])
 
 
@@ -320,53 +320,53 @@ class FuzzyPlayer(Player):
             velocity.view()
             plt.show()
 
-
-        if self.model == "TSK":
         # for TSK:
-        # self.x_universe = np.arange...
-        # self.x_mf = {
-        #     "far_left": fuzz.trapmf(
-        #         self.x_universe,
-        #         [
-        #             ...
-        #         ],
-        #     ),
-        #     ...
-        # }
-        # ...
-        # self.velocity_fx = {
-        #     "f_slow_left": lambda x_diff, y_diff: -1 * (abs(x_diff) + y_diff),
-        #     ...
-        # }
-
-        # visualize TSK
-        # plt.figure()
-        # for name, mf in self.x_mf.items():
-        #     plt.plot(self.x_universe, mf, label=name)
-        # plt.legend()
-        # plt.show()
-        # ...
-
+        if self.model == "TSK":
+            # domains
             self.x_universe = np.arange(-w, w+1)
             self.y_universe = np.arange(0, h+1)
+
+            # first solution  
+            # membership functions          
             self.x_mf = {
-                "far_left": fuzz.zmf(self.x_universe,-w*0.6, 0),
-                "medium_left": fuzz.pimf(self.x_universe, -w * 0.7, -0.6*w, -w*0.4, 0),
-                "close": fuzz.pimf(self.x_universe, -w*0.05, -w*0.03, w*0.03, w*0.05),
-                "medium_right": fuzz.pimf(self.x_universe, 0, w*0.4, w*0.6, w*0.7),
-                "far_right": fuzz.smf(self.x_universe, 0, 0.6*w)}
+                "far_left": fuzz.trapmf(self.x_universe, [-w, -w, -w*0.5, -0.4*w]),
+                "medium_left": fuzz.trapmf(self.x_universe, [-w * 0.5, -0.4*w, -paddle_w/2-10, -paddle_w/2+10]),
+                "close": fuzz.trapmf(self.x_universe, [-paddle_w/2-10, -paddle_w/2+10, paddle_w/2-10, paddle_w/2+10]),
+                "medium_right": fuzz.trapmf(self.x_universe, [paddle_w/2-10, paddle_w/2+10, w*0.4, w*0.5]),
+                "far_right": fuzz.trapmf(self.x_universe, [0.4*w, 0.5*w, w, w])}
             self.y_mf = {
-                "far": fuzz.zmf(self.y_universe, 0, h/4),
-                "mid": fuzz.pimf(self.y_universe, 0, h/3, 2*h/3, h),
-                "close": fuzz.smf(self.y_universe, 3*h/4, h)}
+                "far": fuzz.trimf(self.y_universe, [0, 0, h/8]),
+                "mid": fuzz.trapmf(self.y_universe, [0, h/8, 7*h/8, h]),
+                "close": fuzz.trimf(self.y_universe, [7*h/8, h, h])}
+
+            # # second solution
+            # membership functions
+            # self.x_mf = {
+            #     "far_left": fuzz.zmf(self.x_universe,-w*0.6, 0),
+            #     "medium_left": fuzz.pimf(self.x_universe, -w * 0.7, -0.6*w, -w*0.4, 0),
+            #     "close": fuzz.pimf(self.x_universe, -w*0.05, -w*0.03, w*0.03, w*0.05),
+            #     "medium_right": fuzz.pimf(self.x_universe, 0, w*0.4, w*0.6, w*0.7),
+            #     "far_right": fuzz.smf(self.x_universe, 0, 0.6*w)}
+            # self.y_mf = {
+            #     "far": fuzz.zmf(self.y_universe, 0, h/4),
+            #     "mid": fuzz.pimf(self.y_universe, 0, h/3, 2*h/3, h),
+            #     "close": fuzz.smf(self.y_universe, 3*h/4, h)}
+
+            # velocity functions
+            self.velocity_fx = {"f_fast_left": lambda x_diff, y_diff: - 0.5 - 0.3 * abs(x_diff) - 0.1 * abs(y_diff),
+                                "f_medium_left": lambda x_diff, y_diff: -0.1 + 0.2 * abs(x_diff) - 0.2 * abs(y_diff),
+                                "f_low": lambda x_diff, y_diff: 0.001*(x_diff), 
+                                "f_medium_right": lambda x_diff, y_diff: 0.1 + 0.2 * abs(x_diff) + 0.2 * abs(y_diff),
+                                "f_fast_right": lambda x_diff, y_diff: 0.5 + 0.3 * abs(x_diff) + 0.1 * abs(y_diff)}
             
+            # #second velocity functions
+            # self.velocity_fx = {"f_fast_left": lambda x_diff, y_diff: -1 * (abs(x_diff) + y_diff),
+            #                     "f_medium_left": lambda x_diff, y_diff: -0.8 * (abs(x_diff) + y_diff),
+            #                     "f_low": lambda x_diff, y_diff: 0,
+            #                     "f_medium_right": lambda x_diff, y_diff: 0.8 * (abs(x_diff) + y_diff),
+            #                     "f_fast_right": lambda x_diff, y_diff: 1 * (abs(x_diff) + y_diff)}
 
-            self.velocity_fx = {"f_fast_left": lambda x_diff, y_diff: -1 * (abs(x_diff) + y_diff),
-                                "f_medium_left": lambda x_diff, y_diff: -0.8 * (abs(x_diff) + y_diff),
-                                "f_low": lambda x_diff, y_diff: y_diff*0.001,
-                                "f_medium_right": lambda x_diff, y_diff: 0.8 * (abs(x_diff) + y_diff),
-                                "f_fast_right": lambda x_diff, y_diff: 1 * (abs(x_diff) + y_diff)}
-
+            # visualize TSK
             plt.figure()
             for name, mf in self.x_mf.items():
                 plt.plot(self.x_universe, mf, label=name)
@@ -376,52 +376,25 @@ class FuzzyPlayer(Player):
                 plt.plot(self.y_universe, mf, label=name)
                 plt.legend()        
             plt.show()
-        # y_d["far"] = fuzz.zmf(y_d.universe, 0, h/4)
-        # y_d["mid"] = fuzz.pimf(y_d.universe, 0, h/3, 2*h/3, h)
-        # y_d["close"] = fuzz.smf(y_d.universe, 3*h/4, h)
-
-
 
     def act(self, x_diff: int, y_diff: int):
         velocity = self.make_decision(x_diff, y_diff)
         self.move(self.racket.rect.x + velocity)
 
     def make_decision(self, x_diff: int, y_diff: int):
+        x_diff = -x_diff    # reversing the input to obtain the displacement of the ball w.r.t. the paddle
+
         # for Mamdami:
-        # self.racket_controller.compute()
-        # velocity = self.racket_controller.o..
         if self.model == "Mamdami":
-            x_diff = -x_diff
             self.racket_controller.input["x_displacement"] = x_diff
             self.racket_controller.input["y_displacement"] = y_diff
             self.racket_controller.compute()
             velocity = self.racket_controller.output["velocity"]
             velocity = self.racket_controller.output["velocity"]
+
         # for TSK:
-        # x_vals = {
-        #     name: fuzz.interp_membership(self.x_universe, mf, x_diff)
-        #     for name, mf in self.x_mf.items()
-        # }
-        # ...
-        # rule activations with Zadeh norms
-        # activations = {
-        #     "f_slow_left": max(
-        #         [
-        #             min(x_vals...),
-        #             min(x_vals...),
-        #         ]
-        #     ),
-        #     ...
-        # }
-
-        # velocity = sum(
-        #     activations[val] * self.velocity_fx[val](x_diff, y_diff)
-        #     for val in activations
-        # ) / sum(activations[val] for val in activations)
-
-
         if self.model == "TSK":
-                # for TSK:
+            # membership values
             x_vals = {
                 name: fuzz.interp_membership(self.x_universe, mf, x_diff)
                 for name, mf in self.x_mf.items()
@@ -430,44 +403,21 @@ class FuzzyPlayer(Player):
                 name: fuzz.interp_membership(self.y_universe, mf, y_diff)
                 for name, mf in self.y_mf.items()
             }
-        #print(x_vals.)
-        # ...
-        # rule activations with Zadeh norms
 
-        # rule1 = fuzzcontrol.Rule(x_d["far left"] | x_d["left"], velocity["fast right"])
-        # rule2 = fuzzcontrol.Rule(x_d["far right"] | x_d["right"], velocity["fast left"])
-        # rule3 = fuzzcontrol.Rule(x_d["close"] & (y_d["close"] | y_d["mid"] | y_d["far"]), velocity["low"])
-        # rule1 = fuzzcontrol.Rule(x_d["far left"], velocity["fast right"])
-        # rule2 = fuzzcontrol.Rule(x_d["far right"], velocity["fast left"])
-        # rule3 = fuzzcontrol.Rule(x_d["medium left"] & (y_d["far"]), velocity["medium right"])
-        # rule4 = fuzzcontrol.Rule(x_d["medium right"] & (y_d["far"]), velocity["medium left"])
-        # rule5 = fuzzcontrol.Rule(x_d["medium left"] & ((y_d["mid"]) | y_d["close"]), velocity["fast right"])
-        # rule6 = fuzzcontrol.Rule(x_d["medium right"] & ((y_d["mid"]) | y_d["close"]), velocity["fast left"])
-        # rule7 = fuzzcontrol.Rule(x_d["close"], velocity["low"])
-
-
-
+            # rule activations with Zadeh norms
             activations = {
-                "f_fast_right": max(x_vals["far_left"], min(x_vals["medium_left"], max(y_vals["mid"], y_vals["close"]))),
-                "f_medium_right": min(x_vals["medium_left"], y_vals["far"]),
+                "f_fast_right": max(x_vals["far_right"], min(x_vals["medium_right"], max(y_vals["mid"], y_vals["close"]))),
+                "f_medium_right": min(x_vals["medium_right"], y_vals["far"]),
                 "f_low": x_vals["close"],
-                "f_medium_left": min(x_vals["medium_right"] , y_vals["far"]),
-                "f_fast_left": max(x_vals["far_right"], min(x_vals["medium_right"], max(y_vals["mid"], y_vals["close"]))),
+                "f_medium_left": min(x_vals["medium_left"] , y_vals["far"]),
+                "f_fast_left": max(x_vals["far_left"], min(x_vals["medium_left"], max(y_vals["mid"], y_vals["close"]))),
             }
 
+            # caluclating the velocity as the weighted average
             velocity = sum(
                 activations[val] * self.velocity_fx[val](x_diff, y_diff)
                 for val in activations
             ) / sum(activations[val] for val in activations)
-
-
-
-
-
-
-
-
-
 
 
         return velocity
