@@ -285,73 +285,105 @@ class HumanPlayer(Player):
 # ----------------------------------
 import heapq
 from collections import deque
-
+from dataclasses import dataclass, field
+from typing import Generator, Any, List, Set
 
 class SearchBasedPlayer(Player):
-    ALGORITHM_TYPE = 'astar' 
+    """
+    Options: 'bfs', 'dfs', 'dijkstra', 'astar'
+    """
+    ALGORITHM_TYPE = 'astar'
 
-    @dataclass(order=True)
+    @dataclass#(order=True)
     class State:
-        priority: int
-        cost: int
-        position: Position = None
-        parent: 'SearchBasedPlayer.State' = None
-        direction: Direction = None
-        
-        def __eq__(self, other):
-            if isinstance(other, SearchBasedPlayer.State):
-                return self.position == other.position
-            return False
+        position: Position
+        direction: Direction
+        body: Set[Position] = field(default_factory=set)
+        # obstacles: Set[Position] = field(default_factory=set)
+        priority: int = 0
+        cost: int = 0
+        parent: Any = None
+        length: int = 1
 
+        def __lt__(self, other: 'SearchBasedPlayer.State') -> bool:
+            return self.priority < other.priority
+
+        def __eq__(self, __o: object) -> bool:
+            return isinstance(__o, SearchBasedPlayer.State) and self.position == __o.position and self.direction == __o.direction
+
+        # def __hash__(self) -> int:
+        #     return hash(self.position)
         def __hash__(self):
-            return hash(self.position)
+            return hash((self.position, self.direction))
+
         
-        def expandState(self, body_positions: List[Position], obstacle_positions: Set[Position]) -> List['SearchBasedPlayer.State']:
-            next_states = []
+        def expandState(self) -> Generator['SearchBasedPlayer.State', Any, None]:
             for direction in Direction:
                 x, y = direction.value
                 new_position = Position(self.position.x + x, self.position.y + y)
+                # new_cost = self.cost + 1
+                # if self.position in self.obstacles:
+                #     new_cost += (GRID_WIDTH * GRID_HEIGHT + GRID_WIDTH + GRID_HEIGHT)
                 yield SearchBasedPlayer.State(
-                    priority=0,
-                    cost=self.cost + 1,
                     position=new_position,
+                    direction=direction,
+                    body=self.body,
+                    #obstacles=self.obstacles,
+                    cost=0,
                     parent=self,
-                    direction=direction
                 )
         
-        def isValid(self, body_positions: List[Position]) -> bool:
+        def isValid(self) -> bool:
+            if self.length <= 0:
+                return False
             if self.position.check_bounds(GRID_WIDTH, GRID_HEIGHT):
                 return False
-            if self.position in body_positions:
+            # if self.position in self.obstacles: 
+                #return False
+            if self.position in self.body:
                 return False
+            if self.parent and self.parent.length > 1 and self.direction.reverse() == self.parent.direction:
+                return False 
             return True
         
-    def __init__(self):
+    def __init__(self, algorithm: str = 'astar'):
         super(SearchBasedPlayer, self).__init__()
+        self.obstacles: Set[Position] = set()
+        self.ALGORITHM_TYPE = algorithm
 
     def search_path(self, snake: Snake, food: Food, *obstacles: Set[Obstacle]):
-        obstacle_set = obstacles[0]
-        obstacle_positions = {ob.position for ob in obstacle_set}
-        body_positions = set(snake.positions) 
-        start = SearchBasedPlayer.State(priority=0, cost=0, position=snake.get_head_position())
-        target = SearchBasedPlayer.State(priority=0, cost=0, position=food.position)
+        self.visited.clear()
+
+        self.obstacles = {ob.position for ob in obstacles[0]}
+        
+        current_body = set(snake.positions)
 
         self.history = set()
         self.chosen_path = []
 
-        if self.ALGORITHM_TYPE == 'bfs':
-            path = self.bfs(start, target, body_positions)
-        elif self.ALGORITHM_TYPE == 'dfs':
-            path = self.dfs(start, target, body_positions)
-        elif self.ALGORITHM_TYPE == 'dijkstra':
-            path = self.dijkstra(start, target, body_positions, obstacle_positions)
-        elif self.ALGORITHM_TYPE == 'astar':
-            path = self.astar(start, target, body_positions, obstacle_positions)
-        
-        if path:
-            self.chosen_path = path
+        start_state = self.State(position=snake.get_head_position(), direction=snake.direction, body=current_body, length=snake.length)
+        target_state = self.State(position=food.position, direction=Direction.UP)
 
-    def reconstruct_path(self, end_node: SearchBasedPlayer.State) -> List[Direction]:
+        final_state = None
+
+        if self.ALGORITHM_TYPE == 'bfs':
+            final_state, history = self.bfs(start_state, target_state)
+        elif self.ALGORITHM_TYPE == 'dfs':
+            final_state, history = self.dfs(start_state, target_state)
+        elif self.ALGORITHM_TYPE == 'dijkstra':
+            final_state, history = self.dijkstra(start_state, target_state)
+        elif self.ALGORITHM_TYPE == 'astar':
+            final_state, history = self.astar(start_state, target_state)
+        
+        if final_state:
+            self.chosen_path = self.reconstruct_path(final_state)
+        else:
+            # Requirement: Stop when no path is found.
+            print(f"No path found using {self.ALGORITHM_TYPE}. Game Over.")
+            pygame.quit()
+            sys.exit()
+
+    def reconstruct_path(self, end_node: State) -> List[Direction]:
         path = []
         current = end_node
         while current.parent is not None:
@@ -359,81 +391,104 @@ class SearchBasedPlayer(Player):
             current = current.parent
         return path[::-1] 
 
-    def blind_search(self, start: SearchBasedPlayer.State, target: SearchBasedPlayer.State, body: Set[Position], dfs: bool):
-        states: list[SearchBasedPlayer.State] = [start]
-        
-        history: set[SearchBasedPlayer.State] = set()
+    def blind_search(self, start_state: State, target_state: State, dfs: bool) -> tuple[State, set[Any]]:
+        # states: list[SearchBasedPlayer.State] = [start_state]
+        states = deque([start_state])
+        history = {start_state}
+        # history: set[Any] = set()
 
-        while True:
-            if len(states) == 0:
-                raise Exception("The problem has no solution")
+        # while True:
+        #     if len(states) == 0:
+        #         raise Exception("The problem has no solution")
+        while states:
+            #currentState = states.pop() if dfs else states.pop(0)
+            currentState = states.pop() if dfs else states.popleft()
+            # if currentState in history:
+            #     continue
+            # history.add(currentState)
+            self.visited.add(currentState.position) 
+
+            if currentState.position == target_state.position:
+                return currentState, history
             
-            currentState = states.pop() if dfs else states.pop(0)
-            history.add(currentState)
+            for candidateState in currentState.expandState():
+                candidateState.length = currentState.length - (1 if candidateState.position in self.obstacles else 0)
+                if candidateState.position in self.obstacles:
+                    continue
+                # if candidateState.isValid() and candidateState not in history:
+                #     #states.append(candidateState)
+                #     #if candidateState not in states:
+                #     states.append(candidateState)
+                if not candidateState.isValid():
+                    continue
+                if candidateState in history:
+                    continue
+                history.add(candidateState)
+                states.append(candidateState)
+        return None, history
+    def bfs(self, start_state: State, target_state: State):
+        return self.blind_search(start_state, target_state, dfs=False)
+    def dfs(self, start_state: State, target_state: State):
+        return self.blind_search(start_state, target_state, dfs=True)
 
-            if currentState.position == target.position:
-                return self.reconstruct_path(currentState)
-            
-            for candidateState in currentState.expandState(list(body), set()):
-                if candidateState.isValid(list(body)) and candidateState not in history:
-                    states.append(candidateState)
 
-
-    def dijkstra(self, start: SearchBasedPlayer.State, target: SearchBasedPlayer.State, body: Set[Position], obstacles: Set[Position]):
+    def dijkstra(self, start_state: State, target_state: State):
         # This is effectively A* with a heuristic of 0
-        return self.astar(start, target, body, obstacles, use_heuristic=False)
+        return self.astar(start_state, target_state, use_heuristic=False)
 
-    def astar(self, start: SearchBasedPlayer.State, target: SearchBasedPlayer.State, body: Set[Position], obstacles: Set[Position], use_heuristic=True):
+    def astar(self, start_state: State, target_state: State, use_heuristic=True):
         states = []
-        heapq.heappush(states, start)
-
-        history: set[SearchBasedPlayer.State] = set()
+        heapq.heappush(states, start_state)
+        history: set[Any] = set()
 
         # Track lowest cost to reach a position to prevent cycles and redundant paths
-        cost_so_far = {start: 0}
+        cost_so_far = {start_state: 0}
 
-        while True:
-            if len(states) == 0:
-                raise Exception("The problem has no solution")
-            
+        # while True:
+        #     if len(states) == 0:
+        #         raise Exception("The problem has no solution")
+        while states: 
             currentState = heapq.heappop(states)
 
             # If we found a path to this node that is worse than one we already processed, skip
-            if currentState.cost > cost_so_far[currentState.position]:
+            if currentState.cost > cost_so_far.get(currentState, float('inf')):
                 continue
             
             history.add(currentState)
+            self.visited.add(currentState.position)
 
-            if currentState.position == target.position:
-                return self.reconstruct_path(currentState)
+            if currentState.position == target_state.position:
+                return currentState, history
+            
 
-            for candidateState in currentState.expandState(list(body), obstacles):
-                if candidateState.isValid(list(body)) and candidateState in history:
-                    step_cost = (GRID_WIDTH * GRID_HEIGHT + GRID_WIDTH + GRID_HEIGHT) if candidateState.position in obstacles else 1
+            for candidateState in currentState.expandState():
+                candidateState.length = currentState.length - (1 if candidateState.position in self.obstacles else 0)
+                if candidateState.isValid() and candidateState not in history:
+                    step_cost = (GRID_WIDTH * GRID_HEIGHT + GRID_WIDTH + GRID_HEIGHT) if candidateState.position in self.obstacles else 1
                     new_cost = currentState.cost + step_cost
 
-                    if candidateState.position not in cost_so_far or new_cost < cost_so_far[candidateState.position]:   
-                        cost_so_far[candidateState.position] = new_cost
+                    if new_cost < cost_so_far.get(candidateState, float('inf')):   
+                        cost_so_far[candidateState] = new_cost
                         
                         # Heuristic (Manhattan Distance)
                         h_cost = 0
                         if use_heuristic:
-                            h_cost = abs(target.position.x - candidateState.position.x) + abs(target.position.y - candidateState.position.y)
+                            h_cost = abs(target_state.position.x - candidateState.position.x) + abs(target_state.position.y - candidateState.position.y)
                         
                         priority = new_cost + h_cost
                         
-                        candidateState.priority = priority
                         candidateState.cost = new_cost
+                        candidateState.priority = new_cost + h_cost
                         heapq.heappush(states, candidateState)
-                        
+        return None, history
         # self.generate_states...
         # ...
-        pass
+        # pass
 
 
 if __name__ == "__main__":
     snake = Snake(WIDTH, WIDTH, INIT_LENGTH)
     #player = HumanPlayer()
-    player = SearchBasedPlayer()
+    player = SearchBasedPlayer('astar')
     game = SnakeGame(snake, player)
     game.run()
